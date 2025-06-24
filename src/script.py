@@ -13,11 +13,9 @@ job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
 # Script generated for node Google BigQuery
-GoogleBigQuery_node = glueContext.create_dynamic_frame.from_options(connection_type="bigquery", connection_options={"parentProject": "projectname", "query": "SELECT * FROM `projectname.datasetname.tablename`;", "connectionName": "glue-bigquery-connection", "materializationDataset": "table_mv", "viewsEnabled": "true", "maxparallelism": "1", "table": "datasetname.tablename"}, transformation_ctx="GoogleBigQuery_node")
+GoogleBigQuery_node = glueContext.create_dynamic_frame.from_options(connection_type="bigquery", connection_options={"connectionName": "bq_connection", "parentProject": "projectname", "table": "datasetname.tablename"}, transformation_ctx="GoogleBigQuery_node")
 
-# Script generated for node Amazon S3
-AmazonS3_node = glueContext.getSink(path="s3://bucket_name/", connection_type="s3", updateBehavior="UPDATE_IN_DATABASE", partitionKeys=[], enableUpdateCatalog=True, transformation_ctx="AmazonS3_node")
-AmazonS3_node.setCatalogInfo(catalogDatabase="glue_db",catalogTableName="glue_table")
-AmazonS3_node.setFormat("glueparquet", compression="snappy")
-AmazonS3_node.writeFrame(GoogleBigQuery_node)
+# Script generated for node AWS Glue Data Catalog
+AWSGlueDataCatalog_node = glueContext.write_dynamic_frame.from_catalog(frame=GoogleBigQuery_node, database="glue_db", table_name="glue_table", additional_options={"enableUpdateCatalog": True, "updateBehavior": "UPDATE_IN_DATABASE"}, transformation_ctx="AWSGlueDataCatalog_node")
+
 job.commit()

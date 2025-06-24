@@ -21,9 +21,9 @@ export class BigQueryToGlueStack extends cdk.Stack {
       description: 'Automated BigQuery to AWS data migration pipeline using AWS Glue, Step Functions, and EventBridge for daily scheduled data extraction and transformation to S3 in Parquet format'
     });
 
-    // Create S3 Bucket to store scripts and connector
+    // Create S3 Bucket to store scripts
     const bucket = new Bucket(this, 'GlueScriptBucket', {
-      bucketName: 'bucket_name',  //replace with the unique name that your bucket is going to have
+      bucketName: 'bucketName',  //replace with the unique name that your bucket is going to have
       versioned: true,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
@@ -35,15 +35,6 @@ export class BigQueryToGlueStack extends cdk.Stack {
       sources: [s3deploy.Source.asset(path.join(__dirname, '../src'))], //script with the information for the aws migration
       destinationBucket: bucket,
       destinationKeyPrefix: 'scripts/', //folder name were the script is going to be saved
-      retainOnDelete: false,
-      prune: true,
-    });
-
-    // Upload JDBC connector JAR to S3
-    new s3deploy.BucketDeployment(this, 'DeployJdbcConnector', {
-      sources: [s3deploy.Source.asset(path.join(__dirname, '../src/GoogleBigQueryJDBC42.jar'))], //your .jar required to create the glue connection with bigquery
-      destinationBucket: bucket,
-      destinationKeyPrefix: 'JDBC-connector/', //the connector
       retainOnDelete: false,
       prune: true,
     });
@@ -88,12 +79,12 @@ export class BigQueryToGlueStack extends cdk.Stack {
         project_id: 'project_id',
         private_key_id: 'private_key_id',
         private_key: 'private_key',
-        client_email: 'your-service-account-email',
-        client_id: 'your-client-id',
-        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-        token_uri: 'https://oauth2.googleapis.com/token',
-        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-        client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/your-service-account-email'
+        client_email: 'client_email',
+        client_id: 'client_id',
+        auth_uri: 'auth_uri',
+        token_uri: 'token_uri',
+        auth_provider_x509_cert_url: 'auth_provider_x509_cert_url',
+        client_x509_cert_url: 'client_x509_cert_url'
       }))
     });
 
@@ -108,7 +99,7 @@ export class BigQueryToGlueStack extends cdk.Stack {
     // Permissions for Glue to access S3 and Secrets
     glueRole.addToPolicy(new iam.PolicyStatement({
       actions: ['s3:GetObject', 's3:PutObject'],
-      resources: [`arn:aws:s3:::${bucket.bucketName}/scripts/*`],
+      resources: [`arn:aws:s3:::${bucket.bucketName}/*`],
     }));
 
     glueRole.addToPolicy(new iam.PolicyStatement({
@@ -123,21 +114,6 @@ export class BigQueryToGlueStack extends cdk.Stack {
       resources: [bigQuerySecret.secretArn],
     }));
 
-    // Glue Connection to BigQuery
-    new glue.CfnConnection(this, 'GlueBigQueryConnection', {
-      catalogId: this.account,
-      connectionInput: {
-        name: 'glue-bigquery-connection',
-        connectionType: 'JDBC',
-        connectionProperties: {
-          'JDBC_CONNECTION_URL': 'jdbc:google:bigquery://https://www.googleapis.com/bigquery/v2:443',
-          'JDBC_DRIVER_CLASS_NAME': 'com.google.cloud.bigquery.jdbc.Driver',
-          'JDBC_DRIVER_JAR_URI': `s3://${bucket.bucketName}/JDBC-connector/GoogleBigQueryJDBC42.jar`,
-          'SECRET_ID': bigQuerySecret.secretArn,
-        }
-      }
-    });
-
     // Glue Job
     const glueJob = new glue.CfnJob(this, 'MyGlueJob', {
       name: 'bq_ingestion_job', //define the glue job name
@@ -147,9 +123,9 @@ export class BigQueryToGlueStack extends cdk.Stack {
         scriptLocation: `s3://${bucket.bucketName}/scripts/script.py`,
         pythonVersion: '3',
       },
-      glueVersion: '3.0',
+      glueVersion: '5.0',
       connections: {
-        connections: ['glue-bigquery-connection']
+        connections: ['bq-connection']
       }
     });
 

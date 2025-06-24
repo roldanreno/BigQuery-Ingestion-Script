@@ -1,88 +1,92 @@
-# BigQuery to AWS Glue Ingestion
+# BigQuery to AWS Data Pipeline
 
-This repository uses AWS CDK to deploy a robust, automated architecture that seamlessly extracts data from Google BigQuery and stores it in Amazon S3 for comprehensive analytical purposes. The solution utilizes AWS Glue Jobs for data extraction and transformation, with daily orchestration handled through AWS Step Functions and Amazon EventBridge scheduling.
+Automated data pipeline that extracts data from Google BigQuery and loads it into AWS S3 using AWS Glue, with daily scheduling via Step Functions and EventBridge. Deployed using AWS CDK.
 
-Built for scalability and reliability, this serverless data pipeline eliminates manual intervention while ensuring your BigQuery data is consistently available in your AWS analytics ecosystem. Whether you're migrating analytics workloads, creating cross-platform data lakes, or building hybrid cloud analytics solutions, this architecture provides a production-ready foundation for your data ingestion needs.
+![Architecture Diagram](images/diagram.png)
 
-[![Architecture Diagram](images/diagram.png)]
+## Architecture Overview
 
----
+This solution creates a serverless ETL pipeline that:
+- Extracts data from BigQuery tables
+- Transforms and stores data in S3 as Parquet files
+- Updates AWS Glue Data Catalog automatically
+- Runs on a daily schedule (configurable)
 
 ## Resources Deployed
 
-This stack provisions and configures the following AWS resources:
+| Resource | Purpose |
+|----------|----------|
+| **S3 Bucket** | Stores Glue scripts and output data |
+| **Glue Job** | Executes ETL process from BigQuery to S3 |
+| **Glue Database & Table** | Data catalog for schema management |
+| **Secrets Manager** | Stores BigQuery service account credentials |
+| **Step Functions** | Orchestrates job execution |
+| **EventBridge Rule** | Daily scheduling (11:15 PM CST) |
+| **IAM Roles** | Secure access permissions |
 
-1. **Amazon S3 Bucket**
-   - Stores the Glue script and JDBC connector.
-   - Serves as the destination for the data exported from BigQuery.
+## ETL Process
 
-2. **AWS Glue**
-   - ETL Script
-      - A Python script uploaded to the S3 bucket.
-      - Executes the data extraction from BigQuery and writes the results in Parquet format to S3.
-   - Database and Table
-      - A Glue Data Catalog database and table representing the target schema.
-   - Connection (JDBC)
-      - Connects Glue to BigQuery using the JDBC driver and the credentials stored in Secrets Manager.
+The `script.py` performs these steps:
+1. Connects to BigQuery using stored credentials
+2. Executes SQL query against specified table
+3. Converts data to AWS Glue DynamicFrame
+4. Writes data to S3 in Parquet format
+5. Updates Glue Data Catalog with metadata
 
-3. **JDBC Connector**
-   - A `.jar` file enabling JDBC connectivity between AWS Glue and Google BigQuery. * Note: * Please review versions and update if needed.
+## Prerequisites
 
-4. **VPC (Pre-existing)**
-   - The Glue Job runs within an existing VPC for security and network access.
+### 1. BigQuery Connection Setup
+Create a BigQuery connection in AWS Glue Console following this guide:
+[Setting up BigQuery connections in AWS Glue](https://docs.aws.amazon.com/glue/latest/dg/connection-defining.html#connection-properties-bigquery)
 
-5. **AWS Secrets Manager**
-   - Securely stores the GCP service account credentials (JSON format).
+### 2. Required Configuration Updates
+Before deployment, update these parameters in the code:
 
-6. **AWS Step Function (EXPRESS Type)**
-    - Orchestrates the Glue Job execution.
+- **S3 Bucket Name**: Update `bucketName` in `lib/bigqueryingestiontoaws.ts`
+- **bigQuerySecret Secret values**: Replace credentials in Secrets Manager section in `lib/bigqueryingestiontoaws.ts`
+- **BigQuery Project**: Update `project_id` in `src/script.py`
+- **BigQuery Table**: Update `table` parameter in `src/script.py`
+- **Connection Name**: Update `connectionName` to match your Glue connection in `src/script.py`
 
-7. **Amazon EventBridge Rule**
-    - Triggers the Step Function on a daily schedule (11:15 PM CST).
 
----
+### 3. AWS Prerequisites
+- AWS CLI installed and configured
+- AWS CDK v2 installed
+- Appropriate AWS permissions for resource creation
 
-## What Does the ETL Script (`script.py`) Do?
-
-This Python script performs the following steps:
-
-1. Establishes a connection to Google BigQuery via JDBC and AWS Glue.
-2. Executes a SQL query (customizable).
-3. Converts the result into a DynamicFrame.
-4. Writes the data to S3 in compressed **Parquet** format.
-5. Updates the Glue Data Catalog with the new metadata.
-
----
-
-## Prerequisites Before Deployment
-
-Before deploying, you **must update the parameters** to match your environment:
-
----
-
-## Deployment Steps
-
-1. Ensure the AWS CLI and CDK are installed and configured.
-2. Run the following commands:
+## Deployment
 
 ```bash
+# Install dependencies
 npm install
-```
 
-```bash
+# Bootstrap CDK (first time only)
 cdk bootstrap
-```
 
-```bash
+# Deploy the stack
 cdk deploy
 ```
 
----
+## Configuration
 
-> [!NOTE]
-> The S3 bucket is created with `RemovalPolicy.DESTROY` for development purposes. Modify this if persistence is needed in production.
-> The Secret created via `Secret.fromSecretNameV2` assumes the secret already has existing parameters configured. Ensure it is correctly configured before deployment.
-> The EventBridge rule triggers the Step Function at **11:15 PM CST (05:15 AM UTC)**. You can change this in the CDK code.
-> The architecture supports multi-source pipelines and is easily extensible with more Glue Jobs, multiple BQ tables, or other destinations.
+### Schedule Modification
+To change the execution schedule, modify the EventBridge rule in `lib/bigqueryingestiontoaws.ts`:
+```typescript
+schedule: events.Schedule.cron({ minute: '15', hour: '5' }) // 5:15 AM UTC = 11:15 PM CST
+```
 
----
+### Query Customization
+Update the SQL query in `src/script.py`:
+```python
+"query": "SELECT * FROM `your-project.dataset.table`;"
+```
+
+## Important Notes
+
+> **⚠️ Security**: Replace the hardcoded service account credentials with your own before deployment
+
+> **🗑️ Development Setup**: S3 bucket has `RemovalPolicy.DESTROY` - change for production use
+
+> **🔄 Extensibility**: Architecture supports multiple BigQuery sources and destinations
+
+> **📊 Monitoring**: Check CloudWatch logs for job execution status and errors
